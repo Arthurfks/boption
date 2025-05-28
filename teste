@@ -1,0 +1,88 @@
+import { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+
+const ASSET = "btcusdt";
+const DURATION = 30; // seconds
+
+export default function Home() {
+  const [price, setPrice] = useState(0);
+  const [direction, setDirection] = useState<"call" | "put" | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const [entryPrice, setEntryPrice] = useState(0);
+  const [result, setResult] = useState<string | null>(null);
+  const [balance, setBalance] = useState(1000);
+
+  useEffect(() => {
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${ASSET}@trade`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setPrice(parseFloat(data.p));
+    };
+    return () => ws.close();
+  }, []);
+
+  useEffect(() => {
+    let timer: any;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    } else if (countdown === 0 && direction) {
+      const won =
+        (direction === "call" && price > entryPrice) ||
+        (direction === "put" && price < entryPrice);
+      setBalance((prev) => prev + (won ? 80 : -100));
+      setResult(won ? "Vitória!" : "Derrota!");
+      setDirection(null);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  const handleTrade = (dir: "call" | "put") => {
+    setDirection(dir);
+    setEntryPrice(price);
+    setCountdown(DURATION);
+    setResult(null);
+  };
+
+  return (
+    <main className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-6">
+      <h1 className="text-4xl font-bold mb-4">BinaryX - Trading Binário</h1>
+
+      <Card className="w-full max-w-md bg-gray-900">
+        <CardContent className="space-y-4">
+          <div className="text-xl">Preço Atual: <span className="font-mono">${price.toFixed(2)}</span></div>
+
+          <div className="flex justify-between gap-4">
+            <Button
+              onClick={() => handleTrade("call")}
+              disabled={!!direction || countdown > 0}
+              className="w-full bg-green-600 hover:bg-green-700"
+            >
+              CALL (↑)
+            </Button>
+            <Button
+              onClick={() => handleTrade("put")}
+              disabled={!!direction || countdown > 0}
+              className="w-full bg-red-600 hover:bg-red-700"
+            >
+              PUT (↓)
+            </Button>
+          </div>
+
+          {countdown > 0 && (
+            <div className="space-y-2">
+              <Progress value={(100 * countdown) / DURATION} />
+              <div className="text-center">Tempo restante: {countdown}s</div>
+            </div>
+          )}
+
+          {result && <div className="text-center text-2xl font-bold">{result}</div>}
+
+          <div className="text-center text-lg">Saldo: ${balance.toFixed(2)}</div>
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
